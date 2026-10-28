@@ -11,8 +11,9 @@ function enqueue(task) {
 }
 
 function fromExtensionPage(sender, fileHint) {
-  if (!sender || sender.tab) return false;
-  const url = sender.url || '';
+  // Options is a normal tab, so sender.tab is set. Trust only our own pages.
+  // Content scripts report the YouTube page URL, not a chrome-extension URL.
+  const url = sender?.url || '';
   if (!url.startsWith(`chrome-extension://${chrome.runtime.id}/`)) return false;
   if (fileHint && !url.includes(fileHint)) return false;
   return true;

@@ -11,7 +11,7 @@
   const HARD_MAX_SCROLL_ROUNDS = 8;
   const HARD_MAX_COMMENTS = 200;
   const EXPORT_DEADLINE_MS = 45000;
-  const ROUND_TIMEOUT_MS = 2200;
+  const ROUND_TIMEOUT_MS = 3200;
   const INITIAL_LOAD_TIMEOUT_MS = 6000;
   const MAX_TEXT_CHARS = 8000;
 
@@ -177,50 +177,59 @@ function fieldText(root, selector, block) {
     return null;
   }
 
-  function scrollForMore() {
-    const thread = document.querySelector('ytd-comment-thread-renderer');
-    const panel = thread?.closest('ytd-engagement-panel-section-list-renderer');
-    const scope = panel || commentsRoot() || document;
-    const continuation = scope.querySelector?.('ytd-continuation-item-renderer');
-    if (panel) {
-      const scroller = scrollableAncestor(panel) || panel;
-      scroller.scrollTop = scroller.scrollHeight;
-    }
-    if (continuation) {
-      continuation.scrollIntoView({ block: 'end', behavior: 'instant' });
-      return;
-    }
-    const anchor = commentsRoot();
-    if (anchor) anchor.scrollIntoView({ block: 'end', behavior: 'instant' });
-    window.scrollBy(0, Math.max(700, Math.round(window.innerHeight * 0.9)));
+function scrollForMore() {
+  const thread = document.querySelector('ytd-comment-thread-renderer');
+  const panel = thread?.closest('ytd-engagement-panel-section-list-renderer');
+  if (panel || pageKind() === 'shorts') {
+    // Window scrolling on a Short moves to the next video. Stay inside the panel.
+    const host = panel || document.querySelector('ytd-engagement-panel-section-list-renderer');
+    const scroller = host ? (scrollableAncestor(host) || host) : null;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    host?.querySelector('ytd-continuation-item-renderer')?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    return;
   }
+  const continuation = document.querySelector('ytd-comments ytd-continuation-item-renderer, ytd-continuation-item-renderer');
+  continuation?.scrollIntoView({ block: 'center', behavior: 'instant' });
+  const scroller = document.scrollingElement || document.documentElement;
+  scroller.scrollTop = scroller.scrollHeight;
+}
 
-  async function openShortsCommentsOnce() {
-    if (countThreads() > 0) return;
-    const buttons = [...document.querySelectorAll('button')];
-    const target = buttons.find((button) => {
-      const label = `${button.getAttribute('aria-label') || ''} ${button.innerText || ''}`;
-      return /comment|评论/i.test(label) && !/like|dislike|share|remix|订阅|分享/i.test(label);
-    });
-    if (!target) return;
-    target.click();
-    await sleep(400);
-  }
+function findShortsCommentsButton() {
+  const nodes = [...document.querySelectorAll('button, [role="button"]')];
+  return nodes.find((node) => {
+    const label = `${node.getAttribute('aria-label') || ''} ${node.innerText || ''}`;
+    return /comment|评论/i.test(label) && !/like|dislike|share|remix|订阅|分享/i.test(label);
+  }) || null;
+}
 
-  async function revealComments(kind) {
-    if (kind === 'shorts') await openShortsCommentsOnce();
-    commentsRoot()?.scrollIntoView({ block: 'center', behavior: 'instant' });
-    const started = Date.now();
-    while (Date.now() - started < INITIAL_LOAD_TIMEOUT_MS) {
-      if (countThreads() > 0) return 'ready';
-      if (detectDisabled()) return 'disabled';
-      await sleep(250);
-    }
+async function clickShortsComments() {
+  if (countThreads() > 0) return false;
+  const target = findShortsCommentsButton();
+  if (!target) return false;
+  target.click();
+  await sleep(600);
+  return true;
+}
+
+async function revealComments(kind) {
+  let shortsClicks = 0;
+  if (kind !== 'shorts') commentsRoot()?.scrollIntoView({ block: 'center', behavior: 'instant' });
+  const started = Date.now();
+  while (Date.now() - started < INITIAL_LOAD_TIMEOUT_MS) {
     if (countThreads() > 0) return 'ready';
     if (detectDisabled()) return 'disabled';
-    if (detectConsentWall()) return 'consent';
-    return 'empty';
+    // Shorts keeps comments behind one button. A few tries, then stop.
+    if (kind === 'shorts' && shortsClicks < 4) {
+      const clicked = await clickShortsComments();
+      if (clicked) shortsClicks += 1;
+    }
+    await sleep(300);
   }
+  if (countThreads() > 0) return 'ready';
+  if (detectDisabled()) return 'disabled';
+  if (detectConsentWall()) return 'consent';
+  return 'empty';
+}
 
 function notify(scrollRounds, maxScrollRounds, count) {
   try {

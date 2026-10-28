@@ -59,7 +59,7 @@ English: open `chrome://extensions`, turn on Developer mode, choose “Load unpa
 | `MAX_SCROLL_ROUNDS` / `HARD_MAX_SCROLL_ROUNDS` | 8 | 一次导出最多滚动 8 轮 |
 | `MAX_COMMENTS` / `HARD_MAX_COMMENTS` | 200 | 一次最多保留 200 条 |
 | `EXPORT_DEADLINE_MS` | 45000 | 45 秒到点就停 |
-| `ROUND_TIMEOUT_MS` | 2200 | 每一轮最多再等 2.2 秒 |
+| `ROUND_TIMEOUT_MS` | 3200 | 每一轮最多再等 3.2 秒 |
 
 先到者为准。没有新评论也会停。扩展**没有**定时器，**没有**后台爬取，打开页面时不会自己滚。不会自动点「查看回复」。
 

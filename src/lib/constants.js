@@ -17,7 +17,7 @@ export const HARD_MAX_COMMENTS = 200;
 export const EXPORT_DEADLINE_MS = 45000;
 
 /** How long to wait for newly loaded comments after one scroll. */
-export const ROUND_TIMEOUT_MS = 2200;
+export const ROUND_TIMEOUT_MS = 3200;
 
 /** How long to wait for the first comment paint after the user clicks export. */
 export const INITIAL_LOAD_TIMEOUT_MS = 6000;

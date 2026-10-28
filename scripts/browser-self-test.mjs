@@ -29,19 +29,25 @@ function sleep(ms) {
 }
 
 async function launch() {
+  const extensionDir = '/tmp/sce-ext';
+  fs.rmSync(extensionDir, { recursive: true, force: true });
+  fs.cpSync(root, extensionDir, {
+    recursive: true,
+    filter: (source) => !source.includes(`${path.sep}node_modules`) && !source.includes(`${path.sep}.git`),
+  });
   const browser = await puppeteer.launch({
     executablePath: chrome,
     headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-      `--disable-extensions-except=${root}`,
-      `--load-extension=${root}`,
-      '--lang=zh-CN',
-    ],
+    pipe: true,
+    protocolTimeout: 120000,
+    enableExtensions: [extensionDir],
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--lang=zh-CN'],
     defaultViewport: { width: 1280, height: 900 },
   });
-  const worker = await browser.waitForTarget((target) => target.type() === 'service_worker' && target.url().includes('chrome-extension://'));
+  const worker = await browser.waitForTarget(
+    (target) => target.type() === 'service_worker' && target.url().includes('chrome-extension://'),
+    { timeout: 15000 },
+  );
   const extensionId = new URL(worker.url()).host;
   return { browser, extensionId };
 }
@@ -54,10 +60,31 @@ async function shot(page, name) {
 }
 
 async function openExtensionPage(browser, extensionId, file, videoPage) {
+  if (file.includes('popup.html') && videoPage) {
+    await videoPage.bringToFront();
+    const opener = await browser.newPage();
+    await opener.goto(`chrome-extension://${extensionId}/src/options/options.html`, { waitUntil: 'domcontentloaded' });
+    const known = new Set(browser.targets());
+    await opener.evaluate((url) => chrome.windows.create({
+      url,
+      type: 'popup',
+      width: 440,
+      height: 780,
+      focused: false,
+    }), `chrome-extension://${extensionId}/${file}`);
+    await opener.close();
+    const target = await browser.waitForTarget((candidate) => {
+      return candidate.type() === 'page'
+        && candidate.url().includes('/src/popup/popup.html')
+        && !known.has(candidate);
+    });
+    const popup = await target.page();
+    await sleep(500);
+    await videoPage.bringToFront();
+    return popup;
+  }
   const page = await browser.newPage();
-  if (videoPage) await videoPage.bringToFront();
   await page.goto(`chrome-extension://${extensionId}/${file}`, { waitUntil: 'domcontentloaded' });
-  await page.bringToFront();
   await sleep(400);
   return page;
 }
@@ -107,11 +134,12 @@ function parseCsv(text) {
   return body.map((values) => Object.fromEntries(header.map((key, index) => [key, values[index] || ''])));
 }
 
-async function exportFromPopup(popup) {
+async function exportFromPopup(popup, videoPage) {
   const downloadDir = fs.mkdtempSync(path.join(results, 'dl-'));
   const client = await popup.createCDPSession();
   await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadDir });
   await popup.click('#export');
+  if (videoPage) await videoPage.bringToFront();
   const started = Date.now();
   let csvPath = '';
   let status = '';
@@ -169,6 +197,7 @@ try {
   await sleep(800);
   await extensions.screenshot({ path: path.join(shots, 'manifest-permissions.png'), fullPage: true });
   summary.steps.push({ id: 'permissions', extensionId, file: 'docs/screenshots/manifest-permissions.png' });
+  console.log('step permissions', extensionId);
   await extensions.close();
 
   const other = await browser.newPage();
@@ -181,13 +210,14 @@ try {
     disabled: await otherPopup.$eval('#export', (node) => node.disabled),
   };
   summary.steps.push({ id: 'non-youtube', ...otherState });
+  console.log('step non-youtube', otherState);
   await otherPopup.close();
   await other.close();
 
   const kids = await browser.newPage();
   await prepareWatch(kids, VIDEOS.kidsCommentsOff);
   const kidsPopup = await openExtensionPage(browser, extensionId, 'src/popup/popup.html', kids);
-  const kidsResult = await exportFromPopup(kidsPopup);
+  const kidsResult = await exportFromPopup(kidsPopup, kids);
   await shot(kidsPopup, 'empty-comments.png');
   summary.steps.push({
     id: 'comments-off',
@@ -195,6 +225,7 @@ try {
     csv: Boolean(kidsResult.csvPath),
     quota: kidsResult.quota,
   });
+  console.log('step comments-off', kidsResult.status, kidsResult.quota);
   await kidsPopup.close();
   await kids.close();
 
@@ -207,18 +238,19 @@ try {
   await shot(zooPopup, 'popup-en.png');
   await zooPopup.click('#lang-zh');
   await sleep(300);
-  const zooExport = await exportFromPopup(zooPopup);
+  const zooExport = await exportFromPopup(zooPopup, zoo);
   await shot(zooPopup, 'export-success.png');
   let zooRows = [];
   if (zooExport.csvPath) zooRows = parseCsv(fs.readFileSync(zooExport.csvPath, 'utf8'));
   summary.steps.push({ id: 'zoo-no-key', status: zooExport.status, quota: zooExport.quota, ...redact(zooRows) });
+  console.log('step zoo', zooExport.status, redact(zooRows));
   await zooPopup.close();
   await zoo.close();
 
   const shortPage = await browser.newPage();
   await prepareWatch(shortPage, VIDEOS.short);
   const shortPopup = await openExtensionPage(browser, extensionId, 'src/popup/popup.html', shortPage);
-  const shortExport = await exportFromPopup(shortPopup);
+  const shortExport = await exportFromPopup(shortPopup, shortPage);
   let shortRows = [];
   if (shortExport.csvPath) shortRows = parseCsv(fs.readFileSync(shortExport.csvPath, 'utf8'));
   summary.steps.push({
@@ -238,7 +270,7 @@ try {
     const bunny = await browser.newPage();
     await prepareWatch(bunny, VIDEOS.bunny);
     const bunnyPopup = await openExtensionPage(browser, extensionId, 'src/popup/popup.html', bunny);
-    const bunnyExport = await exportFromPopup(bunnyPopup);
+    const bunnyExport = await exportFromPopup(bunnyPopup, bunny);
     let bunnyRows = [];
     if (bunnyExport.csvPath) bunnyRows = parseCsv(fs.readFileSync(bunnyExport.csvPath, 'utf8'));
     summary.steps.push({ id: secondId, status: bunnyExport.status, quota: bunnyExport.quota, ...redact(bunnyRows) });
@@ -253,7 +285,7 @@ try {
   await options.click('#save-key');
   await sleep(200);
   await options.click('#test-key');
-  await sleep(4000);
+  await sleep(8000);
   await options.type('#license-code', 'not-a-license');
   await options.click('#license-check');
   await sleep(300);
@@ -269,7 +301,7 @@ try {
   await options.close();
 
   const keyedPopup = await openExtensionPage(browser, extensionId, 'src/popup/popup.html', zooAgain);
-  const keyedExport = await exportFromPopup(keyedPopup);
+  const keyedExport = await exportFromPopup(keyedPopup, zooAgain);
   let keyedRows = [];
   if (keyedExport.csvPath) keyedRows = parseCsv(fs.readFileSync(keyedExport.csvPath, 'utf8'));
   summary.steps.push({ id: 'zoo-with-key', status: keyedExport.status, quota: keyedExport.quota, ...redact(keyedRows) });
