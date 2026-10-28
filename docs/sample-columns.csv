@@ -1,0 +1,2 @@
+video_id,video_title,video_url,author_display_name,comment_text,relative_time,like_count,reply_count,is_reply,sentiment,sentiment_note,exported_at,export_stop_reason,scroll_rounds
+exampleVideo,示例视频,https://www.youtube.com/watch?v=exampleVideo,示例作者,这是一条虚构的公开评论。,2 年前,12,3 replies,no,skipped,未填写 OpenAI 密钥。情绪分析已跳过。,2026-10-28T00:00:00.000Z,no_new_comments,1

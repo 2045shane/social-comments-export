@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>设置</title>
+    <link rel="stylesheet" href="../ui/theme.css" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="top">
+        <div class="brand">
+          <div class="seal" aria-hidden="true">评</div>
+          <div>
+            <h1 id="title"></h1>
+            <p id="lead"></p>
+          </div>
+        </div>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" id="lang-zh" aria-pressed="true">中文</button>
+          <button type="button" id="lang-en" aria-pressed="false">EN</button>
+        </div>
+      </header>
+
+      <section class="card" id="byok">
+        <h2 id="byok-title"></h2>
+        <p id="byok-body"></p>
+        <p id="provider-note"></p>
+        <p id="key-state"></p>
+        <p id="perm-state"></p>
+        <form id="key-form">
+          <label id="key-label" for="api-key"></label>
+          <input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" />
+          <div class="row">
+            <button type="submit" id="save-key" class="primary"></button>
+            <button type="button" id="test-key" class="secondary"></button>
+            <button type="button" id="clear-key" class="text-button"></button>
+          </div>
+        </form>
+        <p id="key-status" class="status" role="status"></p>
+      </section>
+
+      <section class="card" id="license">
+        <h2 id="quota-section"></h2>
+        <p id="quota-body"></p>
+        <h2 id="license-title"></h2>
+        <p id="license-body"></p>
+        <p class="cta-contact" id="cta-contact"></p>
+        <p class="cta-channel" id="cta-channel"></p>
+        <form id="license-form">
+          <label id="license-label" for="license-code"></label>
+          <input id="license-code" name="license-code" type="text" autocomplete="off" maxlength="80" />
+          <button type="submit" id="license-check" class="secondary"></button>
+        </form>
+        <p id="license-result" class="status" role="status"></p>
+      </section>
+
+      <section class="card">
+        <h2 id="perm-title"></h2>
+        <ul>
+          <li id="perm-storage"></li>
+          <li id="perm-active"></li>
+          <li id="perm-youtube"></li>
+          <li id="perm-optional"></li>
+          <li id="perm-no-all"></li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2 id="limits-title"></h2>
+        <p id="limits-body"></p>
+      </section>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

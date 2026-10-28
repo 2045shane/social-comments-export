@@ -1,0 +1,84 @@
+body { min-height: 100vh; }
+
+.wrap {
+  width: min(720px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 48px;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.brand { display: flex; gap: 12px; align-items: center; }
+
+h1 { font-size: 32px; }
+
+#lead, .card p, .card li {
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 14px;
+}
+
+.card {
+  margin-top: 16px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.card h2 { font-size: 20px; margin-bottom: 8px; }
+
+.card h2 + h2 { margin-top: 18px; }
+
+label {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.primary { width: auto; padding: 10px 14px; }
+
+.secondary {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.cta-contact {
+  margin: 8px 0 0;
+  color: var(--seal-deep) !important;
+  font-size: 18px !important;
+  font-weight: 700;
+}
+
+.cta-channel { margin-top: 2px; color: var(--ink) !important; }
+
+.status { min-height: 1.2em; }
+
+.status[data-tone="ok"] { color: var(--moss); }
+.status[data-tone="err"] { color: var(--seal-deep); }
+
+ul { margin: 8px 0 0; padding-left: 18px; }
+
+#key-state, #perm-state { margin-bottom: 0; color: var(--ink); }
