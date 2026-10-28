@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>评论导出</title>
+    <link rel="stylesheet" href="../ui/theme.css" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="top">
+        <div class="brand">
+          <div class="seal" aria-hidden="true">评</div>
+          <div>
+            <h1 id="title"></h1>
+            <p id="subtitle"></p>
+          </div>
+        </div>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" id="lang-zh" aria-pressed="true">中文</button>
+          <button type="button" id="lang-en" aria-pressed="false">EN</button>
+        </div>
+      </header>
+
+      <section class="quota-card" id="quota-card">
+        <div class="quota-row">
+          <p id="quota-line"></p>
+          <div id="pips" class="pips" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="page-panel">
+        <p class="eyebrow" id="page-kicker"></p>
+        <h2 id="page-title"></h2>
+        <p id="page-detail"></p>
+      </section>
+
+      <p class="limits" id="limits"></p>
+
+      <section class="panel sentiment">
+        <h2 id="sentiment-title"></h2>
+        <p id="sentiment-body"></p>
+      </section>
+
+      <section class="cta" id="quota-block" hidden>
+        <p class="eyebrow" id="quota-kicker"></p>
+        <h2 id="quota-title"></h2>
+        <p id="quota-body"></p>
+        <p class="cta-contact" id="cta-contact"></p>
+        <p class="cta-channel" id="cta-channel"></p>
+      </section>
+
+      <button type="button" id="export" class="primary"></button>
+      <p id="status" class="status" role="status"></p>
+      <button type="button" id="open-options" class="linkish"></button>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
