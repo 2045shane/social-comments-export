@@ -125,11 +125,15 @@ YouTube 主机是因为要在视频页里读取**已经显示出来**的评论�
 
 ## 开发
 
-运行时没有依赖。单元测试只用 Node 自带的测试运行器：
+界面和模块地图（含配额、许可证、触顶）：`docs/FEATURE-MAP.md`。
+
+运行时没有依赖。单元测试只用 Node 自带的测试运行器。提交前跑这一条，通过才能交：
 
 ```bash
 npm test
 ```
+
+同一条命令在 `.github/workflows/test.yml` 里对 pull request 再跑一遍。重复出现过的限制（每日次数只赋值一处、许可证必须先校验再保存、不把 CSV / BYOK 锁进付费、不写支付 SDK 和密钥）在 `tests/paywall-invariants.test.js` 和 `tests/source-locks.test.js`，失败即红。
 
 `npm install` 只会装开发用的 `puppeteer-core`（调用本机 Chrome）。扩展本身不用打包。
 
