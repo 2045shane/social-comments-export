@@ -3,6 +3,10 @@ import {
   MAX_COMMENTS,
   MAX_SCROLL_ROUNDS,
   MAX_SENTIMENT_COMMENTS,
+  PAID_MAX_COMMENTS,
+  PAID_MAX_SCROLL_ROUNDS,
+  PAID_EXPORT_DEADLINE_MS,
+  EXPORT_DEADLINE_MS,
   STORAGE_KEYS,
 } from '../lib/constants.js';
 import { buildCsv, csvFilename } from '../lib/csv.js';
@@ -40,16 +44,51 @@ function paintChrome() {
   $('lang-en').setAttribute('aria-pressed', lang === 'en' ? 'true' : 'false');
   $('export').textContent = t('exportBtn');
   $('open-options').textContent = t('openSettings');
-  $('limits').textContent = t('limits', { rounds: MAX_SCROLL_ROUNDS, max: MAX_COMMENTS });
   $('sentiment-title').textContent = t('sentimentTitle');
   $('quota-kicker').textContent = t('pageKickerBlocked');
+  $('license-label').textContent = t('licenseLabel');
+  $('license-code').placeholder = t('licensePlaceholder');
+  $('license-save').textContent = t('licenseSave');
+}
+
+function activeCaps(quota) {
+  if (quota?.unlocked) {
+    return {
+      rounds: PAID_MAX_SCROLL_ROUNDS,
+      max: PAID_MAX_COMMENTS,
+      deadline: PAID_EXPORT_DEADLINE_MS,
+    };
+  }
+  return {
+    rounds: MAX_SCROLL_ROUNDS,
+    max: MAX_COMMENTS,
+    deadline: EXPORT_DEADLINE_MS,
+  };
 }
 
 function renderQuota(quota) {
+  const caps = activeCaps(quota);
+  if (quota?.unlocked) {
+    $('quota-line').textContent = t('quotaLineUnlocked', { count: quota.count ?? 0 });
+    $('limits').textContent = t('limitsUnlocked', {
+      rounds: caps.rounds,
+      max: caps.max,
+      freeRounds: MAX_SCROLL_ROUNDS,
+      freeMax: MAX_COMMENTS,
+    });
+    $('pips').replaceChildren();
+    return;
+  }
   const limit = quota?.limit ?? DAILY_FREE_EXPORT_LIMIT;
   const remaining = quota?.remaining ?? limit;
   const count = quota?.count ?? Math.max(0, limit - remaining);
   $('quota-line').textContent = t('quotaLine', { limit, remaining });
+  $('limits').textContent = t('limits', {
+    rounds: MAX_SCROLL_ROUNDS,
+    max: MAX_COMMENTS,
+    paidRounds: PAID_MAX_SCROLL_ROUNDS,
+    paidMax: PAID_MAX_COMMENTS,
+  });
   const pips = $('pips');
   pips.replaceChildren();
   for (let index = 0; index < limit; index += 1) {
@@ -98,10 +137,18 @@ function renderPage(page) {
 
 function renderQuotaBlock(quota) {
   const limit = quota?.limit ?? DAILY_FREE_EXPORT_LIMIT;
+  const remaining = quota?.remaining ?? 0;
   $('quota-title').textContent = t('quotaTitle');
-  $('quota-body').textContent = t('quotaUsed', { limit });
+  $('quota-body').textContent = t('quotaUsed', { limit, remaining });
   $('cta-contact').textContent = t('ctaContact');
   $('cta-channel').textContent = t('ctaChannel');
+}
+
+function setLicenseStatus(text, tone) {
+  const node = $('license-result');
+  node.textContent = text || '';
+  if (tone) node.dataset.tone = tone;
+  else delete node.dataset.tone;
 }
 
 function isOwnExtensionTab(tab) {
@@ -197,11 +244,13 @@ async function onExport() {
       return;
     }
     if (!quota.allowed) {
+      renderQuota(quota);
       renderQuotaBlock(quota);
       $('quota-block').hidden = false;
-      setStatus(t('quotaUsed', { limit: quota.limit }), 'err');
+      setStatus(t('quotaUsed', { limit: quota.limit ?? DAILY_FREE_EXPORT_LIMIT, remaining: quota.remaining ?? 0 }), 'err');
       return;
     }
+    const caps = activeCaps(quota);
     if (page.kind !== 'watch' && page.kind !== 'shorts') {
       setStatus(t('notVideo'), 'err');
       return;
@@ -210,7 +259,11 @@ async function onExport() {
     try {
       response = await chrome.tabs.sendMessage(page.id, {
         type: 'EXPORT_LOADED_COMMENTS',
-        limits: { maxScrollRounds: MAX_SCROLL_ROUNDS, maxComments: MAX_COMMENTS },
+        limits: {
+          maxScrollRounds: caps.rounds,
+          maxComments: caps.max,
+          deadlineMs: caps.deadline,
+        },
       });
     } catch {
       setStatus(t('pageNotReady'), 'err');
@@ -223,9 +276,13 @@ async function onExport() {
 
     const quotaAgain = await chrome.runtime.sendMessage({ type: 'QUOTA_STATUS' });
     if (!quotaAgain?.allowed) {
+      renderQuota(quotaAgain);
       renderQuotaBlock(quotaAgain);
       $('quota-block').hidden = false;
-      setStatus(t('quotaUsed', { limit: quotaAgain?.limit || DAILY_FREE_EXPORT_LIMIT }), 'err');
+      setStatus(t('quotaUsed', {
+        limit: quotaAgain?.limit || DAILY_FREE_EXPORT_LIMIT,
+        remaining: quotaAgain?.remaining ?? 0,
+      }), 'err');
       return;
     }
 
@@ -279,7 +336,7 @@ async function onExport() {
       count: rows.length,
       stop: stopSentence(response.stopReason),
       rounds: response.scrollRounds ?? 0,
-      maxRounds: MAX_SCROLL_ROUNDS,
+      maxRounds: caps.rounds,
     });
     setStatus(`${base}${sentimentTail(outcome)}`, outcome === 'ok' || outcome === 'no_key' || outcome === 'no_permission' ? 'ok' : 'err');
     if (recorded?.ok) renderQuota(recorded);
@@ -295,10 +352,27 @@ function onRuntimeMessage(message) {
   if (!exporting || message?.type !== 'EXPORT_PROGRESS') return undefined;
   setStatus(t('progress', {
     round: message.scrollRounds ?? 0,
-    maxRounds: MAX_SCROLL_ROUNDS,
+    maxRounds: message.maxScrollRounds ?? MAX_SCROLL_ROUNDS,
     count: message.count ?? 0,
   }), 'info');
   return undefined;
+}
+
+async function onLicense(event) {
+  event.preventDefault();
+  const license = $('license-code').value.trim();
+  const saved = await chrome.runtime.sendMessage({ type: 'SAVE_LICENSE', license });
+  if (saved?.error === 'EMPTY') {
+    setLicenseStatus(t('licenseEmpty'), 'err');
+    return;
+  }
+  if (!saved?.ok || !saved.unlocked) {
+    setLicenseStatus(saved?.error === 'INVALID' ? t('licenseResult') : t('internalError'), 'err');
+    return;
+  }
+  $('license-code').value = '';
+  setLicenseStatus(t('licenseSaved', { rounds: PAID_MAX_SCROLL_ROUNDS, max: PAID_MAX_COMMENTS }), 'ok');
+  await refresh();
 }
 
 async function setLang(next) {
@@ -312,6 +386,7 @@ $('lang-zh').addEventListener('click', () => setLang('zh'));
 $('lang-en').addEventListener('click', () => setLang('en'));
 $('open-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
 $('export').addEventListener('click', onExport);
+$('license-form').addEventListener('submit', onLicense);
 chrome.runtime.onMessage.addListener(onRuntimeMessage);
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[STORAGE_KEYS.lang] || exporting) return;

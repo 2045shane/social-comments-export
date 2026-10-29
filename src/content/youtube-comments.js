@@ -1,16 +1,20 @@
 /**
  * Reads public comments already rendered on the open YouTube watch / Shorts page.
  * Runs only after the user clicks export. Stop conditions are all bounded:
- * HARD_MAX_SCROLL_ROUNDS, HARD_MAX_COMMENTS, EXPORT_DEADLINE_MS, or no new rows.
- * Keep the numeric caps aligned with src/lib/constants.js.
+ * HARD_MAX_SCROLL_ROUNDS, HARD_MAX_COMMENTS, the passed deadline, or no new rows.
+ * Missing limits fall back to the free caps. Hard ceilings match the paid caps
+ * in src/lib/constants.js. Keep the numeric literals aligned with that file.
  */
 (() => {
   if (globalThis.__SCE_COMMENTS_EXPORT__) return;
   globalThis.__SCE_COMMENTS_EXPORT__ = true;
 
-  const HARD_MAX_SCROLL_ROUNDS = 8;
-  const HARD_MAX_COMMENTS = 200;
+  const FREE_MAX_SCROLL_ROUNDS = 8;
+  const FREE_MAX_COMMENTS = 200;
+  const HARD_MAX_SCROLL_ROUNDS = 40;
+  const HARD_MAX_COMMENTS = 1000;
   const EXPORT_DEADLINE_MS = 45000;
+  const HARD_EXPORT_DEADLINE_MS = 150000;
   const ROUND_TIMEOUT_MS = 3200;
   const INITIAL_LOAD_TIMEOUT_MS = 6000;
   const MAX_TEXT_CHARS = 8000;
@@ -37,14 +41,20 @@
 
   function clampRounds(value) {
     const number = Number(value);
-    if (!Number.isFinite(number)) return HARD_MAX_SCROLL_ROUNDS;
+    if (!Number.isFinite(number)) return FREE_MAX_SCROLL_ROUNDS;
     return Math.min(HARD_MAX_SCROLL_ROUNDS, Math.max(0, Math.floor(number)));
   }
 
   function clampComments(value) {
     const number = Number(value);
-    if (!Number.isFinite(number)) return HARD_MAX_COMMENTS;
+    if (!Number.isFinite(number)) return FREE_MAX_COMMENTS;
     return Math.min(HARD_MAX_COMMENTS, Math.max(1, Math.floor(number)));
+  }
+
+  function clampDeadline(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return EXPORT_DEADLINE_MS;
+    return Math.min(HARD_EXPORT_DEADLINE_MS, Math.max(1000, Math.floor(number)));
   }
 
   function pageKind() {
@@ -246,10 +256,10 @@ function notify(scrollRounds, maxScrollRounds, count) {
   }
 }
 
-async function waitForGrowth(seen, before, maxComments, timeoutMs, startedAt) {
+async function waitForGrowth(seen, before, maxComments, timeoutMs, startedAt, deadlineMs) {
   const begin = Date.now();
   while (Date.now() - begin < timeoutMs) {
-    if (Date.now() - startedAt > EXPORT_DEADLINE_MS) return false;
+    if (Date.now() - startedAt > deadlineMs) return false;
     absorb(seen, maxComments);
     if (seen.size > before) return true;
     await sleep(200);
@@ -270,6 +280,7 @@ async function waitForGrowth(seen, before, maxComments, timeoutMs, startedAt) {
   async function exportLoaded(limits) {
     const maxScrollRounds = clampRounds(limits?.maxScrollRounds);
     const maxComments = clampComments(limits?.maxComments);
+    const deadlineMs = clampDeadline(limits?.deadlineMs);
     const kind = pageKind();
     if (kind !== 'watch' && kind !== 'shorts') return { ok: false, error: 'NOT_VIDEO_PAGE' };
 
@@ -285,7 +296,7 @@ async function waitForGrowth(seen, before, maxComments, timeoutMs, startedAt) {
     let scrollRounds = 0;
 
     for (let round = 0; round <= maxScrollRounds; round += 1) {
-      if (Date.now() - startedAt > EXPORT_DEADLINE_MS) {
+      if (Date.now() - startedAt > deadlineMs) {
         stopReason = 'deadline';
         break;
       }
@@ -302,13 +313,13 @@ async function waitForGrowth(seen, before, maxComments, timeoutMs, startedAt) {
       const before = seen.size;
       scrollForMore();
       scrollRounds += 1;
-      const grew = await waitForGrowth(seen, before, maxComments, ROUND_TIMEOUT_MS, startedAt);
+      const grew = await waitForGrowth(seen, before, maxComments, ROUND_TIMEOUT_MS, startedAt, deadlineMs);
       if (seen.size >= maxComments) {
         stopReason = 'max_comments';
         break;
       }
       if (!grew) {
-        stopReason = Date.now() - startedAt > EXPORT_DEADLINE_MS ? 'deadline' : 'no_new_comments';
+        stopReason = Date.now() - startedAt > deadlineMs ? 'deadline' : 'no_new_comments';
         break;
       }
     }

@@ -48,10 +48,14 @@
         <p id="license-body"></p>
         <p class="cta-contact" id="cta-contact"></p>
         <p class="cta-channel" id="cta-channel"></p>
+        <p id="license-state"></p>
         <form id="license-form">
           <label id="license-label" for="license-code"></label>
-          <input id="license-code" name="license-code" type="text" autocomplete="off" maxlength="80" />
-          <button type="submit" id="license-check" class="secondary"></button>
+          <input id="license-code" name="license-code" type="text" autocomplete="off" spellcheck="false" maxlength="120" />
+          <div class="row">
+            <button type="submit" id="license-save" class="secondary"></button>
+            <button type="button" id="license-clear" class="text-button"></button>
+          </div>
         </form>
         <p id="license-result" class="status" role="status"></p>
       </section>
