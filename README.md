@@ -1,10 +1,10 @@
 # YouTube 公开评论导出
 
-把**当前打开的 YouTube 公开视频或 Shorts**上、已经加载出来的公开评论导出成 CSV。可选情绪分析：你自己粘贴 OpenAI 密钥（BYOK）。免费额度每天 3 次，只记在本机。
+把**当前打开的 YouTube 公开视频或 Shorts**上、已经加载出来的公开评论导出成 CSV。可选情绪分析：你自己粘贴 OpenAI 密钥（BYOK）。免费档每天 3 次，另有单次条数和滚动上限；粘贴许可证可以在本机提高这两项。次数只记在本机。
 
-Cut：`SOCIAL-COMMENTS-CUT-2026-10-28-v1`
+功能范围仍是 `SOCIAL-COMMENTS-CUT-2026-10-28-v1`（仅 YouTube 公开评论）。收费说明属于 `PLUGIN-PAYWALL-CUT-2026-10-29-v1`。
 
-English: a Manifest V3 extension that exports public comments already loaded on the open YouTube video or Short. Sentiment is optional and uses your own OpenAI key. Three free exports per day, counted only in this browser. This cut is not submitted to the Chrome Web Store and has no payment.
+English: a Manifest V3 extension that exports public comments already loaded on the open YouTube video or Short. Sentiment is optional and uses your own OpenAI key. The free tier is three exports per local day, plus a per-export cap. Pasting a license raises those caps on this device. This cut is not a Chrome Web Store paid listing and has no payment SDK.
 
 ## 安装（加载已解压的扩展）
 
@@ -22,10 +22,11 @@ English: open `chrome://extensions`, turn on Developer mode, choose “Load unpa
 ## 使用
 
 1. 停留在公开视频或 Shorts 页。首页、搜索、频道页不能导出。
-2. 看一眼「每天 3 次 · 今日剩余 N 次」和单次滚动上限。
-3. 点「导出 CSV」。扩展只会在这一次点击里滚动当前页，把已经出现的公开评论写入文件。
-4. 没有密钥也能导出。情绪列写「skipped」，并说明要自备密钥。
+2. 看一眼「每天 3 次 · 今日剩余 N 次」和单次上限（免费档 8 轮 / 200 条，解锁后 40 轮 / 1000 条）。
+3. 点「导出 CSV」。扩展只会在这一次点击里滚动当前页，把已经出现的公开评论写入文件。CSV 导出本身不锁进付费。
+4. 没有密钥也能导出。情绪列写「skipped」，并说明要自备密钥。情绪分析继续 BYOK，不锁进付费。
 5. 密钥在「密钥、权限与联系解锁」里粘贴。保存后输入框会清空，密钥只留在本机。
+6. 免费次数用完后按钮会关掉，剩余显示 0，并出现许可证输入框。也可以先到设置页粘贴许可证。
 
 ## CSV 列
 
@@ -52,16 +53,19 @@ English: open `chrome://extensions`, turn on Developer mode, choose “Load unpa
 
 ## 滚动上限
 
-数字在 `src/lib/constants.js`，内容脚本里有同样的硬顶：
+免费档数字是 `MAX_SCROLL_ROUNDS` 和 `MAX_COMMENTS`。解锁后用 `PAID_MAX_SCROLL_ROUNDS` 和 `PAID_MAX_COMMENTS`（各为免费档的 5 倍）。内容脚本硬顶 `HARD_MAX_*` 等于付费档，避免单次超过解锁上限；没传数字时回落到免费档，不会静默放宽。
 
-| 常量 | 值 | 作用 |
-| --- | --- | --- |
-| `MAX_SCROLL_ROUNDS` / `HARD_MAX_SCROLL_ROUNDS` | 8 | 一次导出最多滚动 8 轮 |
-| `MAX_COMMENTS` / `HARD_MAX_COMMENTS` | 200 | 一次最多保留 200 条 |
-| `EXPORT_DEADLINE_MS` | 45000 | 45 秒到点就停 |
-| `ROUND_TIMEOUT_MS` | 3200 | 每一轮最多再等 3.2 秒 |
+| 常量 | 免费档 | 解锁后 | 作用 |
+| --- | --- | --- | --- |
+| `DAILY_FREE_EXPORT_LIMIT` | 3 | 今日不限次数 | 只计成功写出的 CSV |
+| `MAX_SCROLL_ROUNDS` / `PAID_MAX_SCROLL_ROUNDS` | 8 | 40（8×5） | 一次导出最多滚动这么多轮 |
+| `MAX_COMMENTS` / `PAID_MAX_COMMENTS` | 200 | 1000（200×5） | 一次最多保留这么多条 |
+| `EXPORT_DEADLINE_MS` / `PAID_EXPORT_DEADLINE_MS` | 45000（45 秒） | 150000（150 秒） | 到点就停，原因写进 CSV 和弹窗 |
+| `ROUND_TIMEOUT_MS` | 3200 | 3200 | 每一轮最多再等 3.2 秒 |
 
-先到者为准。没有新评论也会停。扩展**没有**定时器，**没有**后台爬取，打开页面时不会自己滚。不会自动点「查看回复」。
+本切选择「付费单次上限 = 免费 ×5」，不是「本机无硬顶」。40 轮和 1000 条就是设备上的硬顶。
+
+先到者为准。没有新评论也会停。扩展**没有**定时器，**没有**后台爬取，打开页面时不会自己滚。不会自动点「查看回复」。停在条数、轮数或时间上限时，弹窗和 CSV 的 `export_stop_reason` 都会写明原因，不会假装已经导出全部评论。
 
 YouTube 会把滚出屏幕的评论从 DOM 里拿掉。扩展按出现顺序记住已经见过的评论，所以不会只剩下最后一屏。
 
@@ -92,14 +96,24 @@ YouTube 主机是因为要在视频页里读取**已经显示出来**的评论�
 
 ## 免费次数和联系
 
-常量 `DAILY_FREE_EXPORT_LIMIT = 3`。按**浏览器本地日历日**计数，存在本机，没有服务器配额。成功写出 CSV 才计一次。页面不对、没有评论、评论已关闭，都不计次。
+常量 `DAILY_FREE_EXPORT_LIMIT = 3`（只在 `src/lib/constants.js` 写这一处）。按**浏览器本地日历日**计数，存在本机，没有服务器配额。成功写出 CSV 才计一次。页面不对、没有评论、评论已关闭，都不计次。
 
-用完以后导出按钮关掉，并显示：
+弹窗主路径会显示「每天 3 次 · 今日剩余 N 次」，以及免费档单次 8 轮 / 200 条、解锁后 40 轮 / 1000 条。
+
+用完以后导出按钮关掉，剩余显示 0，**不会**生成空的 CSV 冒充成功，并显示：
 
 - 有问题请联系我
 - 小红书私信「珊哥爱读书」
+- 许可证输入框（弹窗触顶时，以及设置页）
 
-设置页有许可证输入框。它是占位：**不接入支付，也不校验许可证，填什么都不会加次数。** 输入内容不会被保存，也不会被发送。
+解锁有两条路，本机生效，不经过商店付款：
+
+1. 粘贴有效许可证并保存。今日次数不再受限，单次上限改为 40 轮、1000 条。
+2. 小红书私信「珊哥爱读书」领取许可证，或询问使用问题。
+
+清除许可证后回到免费档。当天已经成功导出的次数还在：满 3 次会再次被挡住，剩余显示 0。无效许可证不会保存，界面会说明它无效。
+
+本切**没有** Chrome 网上应用店付费上架，**没有**支付 SDK，**没有**服务器计费或配额。CSV 导出和 BYOK 情绪分析都不锁进付费。仓库里没有 Shane 的 API 密钥。
 
 ## 公开评论和平台条款
 

@@ -81,4 +81,4 @@ input {
 
 ul { margin: 8px 0 0; padding-left: 18px; }
 
-#key-state, #perm-state { margin-bottom: 0; color: var(--ink); }
+#key-state, #perm-state, #license-state { margin-bottom: 0; color: var(--ink); }

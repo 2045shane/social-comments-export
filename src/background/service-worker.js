@@ -1,4 +1,5 @@
-import { DAILY_FREE_EXPORT_LIMIT, OPENAI_ORIGIN, STORAGE_KEYS } from '../lib/constants.js';
+import { DAILY_FREE_EXPORT_LIMIT, OPENAI_ORIGIN, STORAGE_KEYS, tierCaps } from '../lib/constants.js';
+import { verifyLicense } from '../lib/license.js';
 import { quotaAfterExport, readQuota } from '../lib/quota.js';
 import { annotateComments, runSentiment, testProviderKey } from '../lib/sentiment.js';
 
@@ -15,8 +16,9 @@ function fromExtensionPage(sender, fileHint) {
   // Content scripts report the YouTube page URL, not a chrome-extension URL.
   const url = sender?.url || '';
   if (!url.startsWith(`chrome-extension://${chrome.runtime.id}/`)) return false;
-  if (fileHint && !url.includes(fileHint)) return false;
-  return true;
+  if (!fileHint) return true;
+  const hints = Array.isArray(fileHint) ? fileHint : [fileHint];
+  return hints.some((hint) => url.includes(hint));
 }
 
 async function readStoredKey() {
@@ -32,26 +34,56 @@ async function providerPermission() {
   }
 }
 
+async function readUnlock() {
+  const data = await chrome.storage.local.get(STORAGE_KEYS.license);
+  return verifyLicense(data[STORAGE_KEYS.license]);
+}
+
+function quotaPayload(quota, unlocked) {
+  return {
+    date: quota.date,
+    count: quota.count,
+    limit: quota.limit,
+    remaining: quota.remaining,
+    allowed: quota.allowed,
+    unlocked: quota.unlocked,
+    ...tierCaps(unlocked),
+  };
+}
+
 async function quotaStatus() {
   const data = await chrome.storage.local.get(STORAGE_KEYS.quota);
-  return { ok: true, ...readQuota(data[STORAGE_KEYS.quota], new Date(), DAILY_FREE_EXPORT_LIMIT) };
+  const unlocked = await readUnlock();
+  const quota = readQuota(data[STORAGE_KEYS.quota], new Date(), DAILY_FREE_EXPORT_LIMIT, unlocked);
+  return { ok: true, ...quotaPayload(quota, unlocked) };
 }
 
 async function recordExport() {
   const data = await chrome.storage.local.get(STORAGE_KEYS.quota);
-  const next = quotaAfterExport(data[STORAGE_KEYS.quota], new Date(), DAILY_FREE_EXPORT_LIMIT);
+  const unlocked = await readUnlock();
+  const next = quotaAfterExport(data[STORAGE_KEYS.quota], new Date(), DAILY_FREE_EXPORT_LIMIT, unlocked);
   if (next.recorded) {
     await chrome.storage.local.set({ [STORAGE_KEYS.quota]: next.stored });
   }
   return {
     ok: true,
     recorded: next.recorded,
-    date: next.date,
-    count: next.count,
-    limit: next.limit,
-    remaining: next.remaining,
-    allowed: next.allowed,
+    ...quotaPayload(next, unlocked),
   };
+}
+
+async function saveLicense(token) {
+  const license = String(token || '').trim();
+  if (!license) return { ok: false, error: 'EMPTY' };
+  if (license.length > 120) return { ok: false, error: 'INVALID' };
+  if (!(await verifyLicense(license))) return { ok: false, error: 'INVALID' };
+  await chrome.storage.local.set({ [STORAGE_KEYS.license]: license });
+  return quotaStatus();
+}
+
+async function clearLicense() {
+  await chrome.storage.local.remove(STORAGE_KEYS.license);
+  return quotaStatus();
 }
 
 async function keyStatus() {
@@ -113,6 +145,14 @@ async function handle(message, sender) {
   switch (message?.type) {
     case 'QUOTA_STATUS':
       return quotaStatus();
+    case 'LICENSE_STATUS':
+      return quotaStatus();
+    case 'SAVE_LICENSE':
+      if (!fromExtensionPage(sender, ['/src/popup/', '/src/options/'])) return { ok: false, error: 'FORBIDDEN' };
+      return saveLicense(message.license);
+    case 'CLEAR_LICENSE':
+      if (!fromExtensionPage(sender, ['/src/popup/', '/src/options/'])) return { ok: false, error: 'FORBIDDEN' };
+      return clearLicense();
     case 'RECORD_EXPORT':
       if (!fromExtensionPage(sender, '/src/popup/')) return { ok: false, error: 'FORBIDDEN' };
       return recordExport();

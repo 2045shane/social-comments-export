@@ -36,4 +36,36 @@ test('corrupt quota storage does not grant extra exports', () => {
   assert.equal(readQuota({ date: '2026-10-28', count: -4 }, now).count, 0);
   assert.equal(readQuota({ date: '2026-10-28', count: 'nope' }, now).count, 0);
   assert.equal(readQuota({ date: '2026-10-28', count: 9 }, now).allowed, false);
+  assert.equal(readQuota({ date: '2026-10-28', count: 9 }, now).remaining, 0);
+  assert.equal(readQuota({ date: '2026-10-28', count: 9 }, now).unlocked, false);
+});
+
+test('a local unlock removes the daily cap and clearing it restores the free cap', () => {
+  const day = new Date(2026, 9, 28, 12, 0, 0);
+  let stored = null;
+  for (let index = 0; index < 4; index += 1) {
+    const next = quotaAfterExport(stored, day, DAILY_FREE_EXPORT_LIMIT, true);
+    assert.equal(next.recorded, true);
+    assert.equal(next.allowed, true);
+    assert.equal(next.unlocked, true);
+    assert.equal(next.limit, null);
+    assert.equal(next.remaining, null);
+    stored = next.stored;
+  }
+  assert.equal(stored.count, 4);
+  const back = readQuota(stored, day, DAILY_FREE_EXPORT_LIMIT, false);
+  assert.equal(back.allowed, false);
+  assert.equal(back.remaining, 0);
+  assert.equal(back.limit, DAILY_FREE_EXPORT_LIMIT);
+  assert.equal(back.unlocked, false);
+});
+
+test('clearing a license before three exports leaves the free remainder', () => {
+  const day = new Date(2026, 9, 28, 12, 0, 0);
+  const once = quotaAfterExport(null, day, DAILY_FREE_EXPORT_LIMIT, true);
+  const back = readQuota(once.stored, day);
+  assert.equal(back.count, 1);
+  assert.equal(back.remaining, 2);
+  assert.equal(back.allowed, true);
+  assert.equal(back.unlocked, false);
 });

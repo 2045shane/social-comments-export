@@ -7,6 +7,11 @@ import {
   HARD_MAX_COMMENTS,
   HARD_MAX_SCROLL_ROUNDS,
   INITIAL_LOAD_TIMEOUT_MS,
+  MAX_COMMENTS,
+  MAX_SCROLL_ROUNDS,
+  PAID_EXPORT_DEADLINE_MS,
+  PAID_MAX_COMMENTS,
+  PAID_MAX_SCROLL_ROUNDS,
   ROUND_TIMEOUT_MS,
 } from '../src/lib/constants.js';
 
@@ -62,13 +67,37 @@ test('source does not hardcode a provider key or call any host except YouTube an
 
 test('content script scroll loop is hard-capped and does not run on a timer', () => {
   const source = fs.readFileSync(path.join(root, 'src/content/youtube-comments.js'), 'utf8');
+  assert.equal(readConst(source, 'FREE_MAX_SCROLL_ROUNDS'), MAX_SCROLL_ROUNDS);
+  assert.equal(readConst(source, 'FREE_MAX_COMMENTS'), MAX_COMMENTS);
   assert.equal(readConst(source, 'HARD_MAX_SCROLL_ROUNDS'), HARD_MAX_SCROLL_ROUNDS);
   assert.equal(readConst(source, 'HARD_MAX_COMMENTS'), HARD_MAX_COMMENTS);
+  assert.equal(HARD_MAX_SCROLL_ROUNDS, PAID_MAX_SCROLL_ROUNDS);
+  assert.equal(HARD_MAX_COMMENTS, PAID_MAX_COMMENTS);
   assert.equal(readConst(source, 'EXPORT_DEADLINE_MS'), EXPORT_DEADLINE_MS);
+  assert.equal(readConst(source, 'HARD_EXPORT_DEADLINE_MS'), PAID_EXPORT_DEADLINE_MS);
   assert.equal(readConst(source, 'ROUND_TIMEOUT_MS'), ROUND_TIMEOUT_MS);
   assert.equal(readConst(source, 'INITIAL_LOAD_TIMEOUT_MS'), INITIAL_LOAD_TIMEOUT_MS);
+  assert.match(source, /if \(!Number\.isFinite\(number\)\) return FREE_MAX_SCROLL_ROUNDS;/);
+  assert.match(source, /if \(!Number\.isFinite\(number\)\) return FREE_MAX_COMMENTS;/);
+  assert.match(source, /if \(!Number\.isFinite\(number\)\) return EXPORT_DEADLINE_MS;/);
   assert.equal(source.includes('while (true)'), false);
   assert.equal(source.includes('setInterval'), false);
   assert.equal(source.includes('fetch('), false);
   assert.match(source, /for \(let round = 0; round <= maxScrollRounds; round \+= 1\)/);
+});
+
+test('repo has no provider key, Shane key, payment SDK, or server quota client', () => {
+  const files = walk(path.join(root, 'src'))
+    .concat(path.join(root, 'manifest.json'))
+    .concat(path.join(root, 'package.json'));
+  const text = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+  assert.equal(/sk-[A-Za-z0-9]{8,}/.test(text), false);
+  assert.equal(/sk-proj-/.test(text), false);
+  assert.equal(/AKIA[0-9A-Z]{16}/.test(text), false);
+  assert.equal(/shane[_-]?api[_-]?key/i.test(text), false);
+  assert.equal(/api[_-]?key\s*[:=]\s*['"][A-Za-z0-9_-]{16,}['"]/i.test(text), false);
+  const lowered = text.toLowerCase();
+  for (const word of ['stripe', 'paypal', 'chrome.payments', 'buy.stripe.com']) {
+    assert.equal(lowered.includes(word), false, word);
+  }
 });

@@ -4,6 +4,9 @@ import {
   MAX_COMMENTS,
   MAX_SCROLL_ROUNDS,
   MAX_SENTIMENT_COMMENTS,
+  PAID_EXPORT_DEADLINE_MS,
+  PAID_MAX_COMMENTS,
+  PAID_MAX_SCROLL_ROUNDS,
   SENTIMENT_ENDPOINT,
   SENTIMENT_MODELS_ENDPOINT,
   SENTIMENT_MODEL,
@@ -53,14 +56,21 @@ function paint() {
   $('clear-key').textContent = t('clearKey');
   $('test-key').textContent = t('testKey');
   $('quota-section').textContent = t('quotaSection');
-  $('quota-body').textContent = t('quotaBody', { limit: DAILY_FREE_EXPORT_LIMIT });
+  $('quota-body').textContent = t('quotaBody', {
+    limit: DAILY_FREE_EXPORT_LIMIT,
+    freeRounds: MAX_SCROLL_ROUNDS,
+    freeMax: MAX_COMMENTS,
+    paidRounds: PAID_MAX_SCROLL_ROUNDS,
+    paidMax: PAID_MAX_COMMENTS,
+  });
   $('license-title').textContent = t('licenseTitle');
   $('license-body').textContent = t('licenseBody');
   $('cta-contact').textContent = t('ctaContact');
   $('cta-channel').textContent = t('ctaChannel');
   $('license-label').textContent = t('licenseLabel');
   $('license-code').placeholder = t('licensePlaceholder');
-  $('license-check').textContent = t('licenseCheck');
+  $('license-save').textContent = t('licenseSave');
+  $('license-clear').textContent = t('licenseClear');
   $('perm-title').textContent = t('permTitle');
   $('perm-storage').textContent = t('permStorage');
   $('perm-active').textContent = t('permActiveTab');
@@ -69,9 +79,12 @@ function paint() {
   $('perm-no-all').textContent = t('permNoAll');
   $('limits-title').textContent = t('limitsTitle');
   $('limits-body').textContent = t('limitsBody', {
-    rounds: MAX_SCROLL_ROUNDS,
-    max: MAX_COMMENTS,
+    freeRounds: MAX_SCROLL_ROUNDS,
+    freeMax: MAX_COMMENTS,
+    paidRounds: PAID_MAX_SCROLL_ROUNDS,
+    paidMax: PAID_MAX_COMMENTS,
     seconds: Math.round(EXPORT_DEADLINE_MS / 1000),
+    paidSeconds: Math.round(PAID_EXPORT_DEADLINE_MS / 1000),
   });
 }
 
@@ -131,11 +144,53 @@ async function onTest() {
   await refreshKey();
 }
 
-function onLicense(event) {
+async function refreshLicense() {
+  const status = await chrome.runtime.sendMessage({ type: 'LICENSE_STATUS' });
+  if (status?.unlocked) {
+    $('license-state').textContent = t('licenseStateOn', {
+      rounds: PAID_MAX_SCROLL_ROUNDS,
+      max: PAID_MAX_COMMENTS,
+    });
+  } else {
+    $('license-state').textContent = t('licenseStateOff', {
+      limit: DAILY_FREE_EXPORT_LIMIT,
+      rounds: MAX_SCROLL_ROUNDS,
+      max: MAX_COMMENTS,
+    });
+  }
+  return status;
+}
+
+async function onLicense(event) {
   event.preventDefault();
-  // The typed code is not stored and is not sent anywhere.
+  const license = $('license-code').value.trim();
+  const saved = await chrome.runtime.sendMessage({ type: 'SAVE_LICENSE', license });
+  if (saved?.error === 'EMPTY') {
+    setStatus('license-result', t('licenseEmpty'), 'err');
+    return;
+  }
+  if (!saved?.ok || !saved.unlocked) {
+    setStatus('license-result', saved?.error === 'INVALID' ? t('licenseResult') : t('internalError'), 'err');
+    return;
+  }
   $('license-code').value = '';
-  setStatus('license-result', t('licenseResult'), 'err');
+  setStatus('license-result', t('licenseSaved', { rounds: PAID_MAX_SCROLL_ROUNDS, max: PAID_MAX_COMMENTS }), 'ok');
+  await refreshLicense();
+}
+
+async function onClearLicense() {
+  const cleared = await chrome.runtime.sendMessage({ type: 'CLEAR_LICENSE' });
+  $('license-code').value = '';
+  if (!cleared?.ok || cleared.unlocked) {
+    setStatus('license-result', t('internalError'), 'err');
+    return;
+  }
+  setStatus('license-result', t('licenseCleared', {
+    limit: DAILY_FREE_EXPORT_LIMIT,
+    rounds: MAX_SCROLL_ROUNDS,
+    max: MAX_COMMENTS,
+  }), 'ok');
+  await refreshLicense();
 }
 
 async function setLang(next) {
@@ -144,6 +199,7 @@ async function setLang(next) {
   document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
   paint();
   await refreshKey();
+  await refreshLicense();
 }
 
 $('lang-zh').addEventListener('click', () => setLang('zh'));
@@ -152,6 +208,8 @@ $('key-form').addEventListener('submit', onSave);
 $('clear-key').addEventListener('click', onClear);
 $('test-key').addEventListener('click', onTest);
 $('license-form').addEventListener('submit', onLicense);
+$('license-clear').addEventListener('click', onClearLicense);
 await loadLang();
 paint();
 await refreshKey();
+await refreshLicense();
